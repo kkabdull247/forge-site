@@ -1,0 +1,1695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Siteforge — Clone any site into a working project</title>
+<meta name="description" content="Siteforge pulls a page's markup, styles, scripts and images into a clean local project you can open, edit, or hand off.">
+<meta name="theme-color" content="#0a0e1a">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+
+/* =========================================================
+   TOKENS
+========================================================= */
+
+:root{
+  --bg-0:#080b15;
+  --bg-1:#0d1224;
+  --bg-2:#131a33;
+
+  --glass-fill: rgba(234,240,255,.055);
+  --glass-fill-strong: rgba(234,240,255,.09);
+  --glass-border: rgba(234,240,255,.14);
+  --glass-border-bright: rgba(234,240,255,.28);
+
+  --ink:#eef2ff;
+  --ink-dim:#aab4d6;
+  --ink-faint:#727ea6;
+
+  --cyan:#59e6d9;
+  --violet:#8d7bf5;
+  --magenta:#f2568f;
+  --amber:#f5b855;
+  --danger:#f2617a;
+
+  --radius-lg:22px;
+  --radius-md:14px;
+  --radius-sm:9px;
+
+  --sans:"Space Grotesk",Arial,sans-serif;
+  --mono:"JetBrains Mono",monospace;
+
+  --shadow-glass: 0 20px 60px -20px rgba(0,0,0,.6);
+}
+
+:root[data-theme="light"]{
+  --bg-0:#eef1fb;
+  --bg-1:#e6eafb;
+  --bg-2:#dde3fa;
+
+  --glass-fill: rgba(20,25,50,.045);
+  --glass-fill-strong: rgba(20,25,50,.08);
+  --glass-border: rgba(20,25,50,.10);
+  --glass-border-bright: rgba(20,25,50,.20);
+
+  --ink:#12162a;
+  --ink-dim:#4c5478;
+  --ink-faint:#7c84a8;
+
+  --shadow-glass: 0 20px 50px -22px rgba(30,35,70,.35);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+
+html{scroll-behavior:smooth}
+
+body{
+  min-height:100vh;
+  background:var(--bg-0);
+  color:var(--ink);
+  font-family:var(--sans);
+  overflow-x:hidden;
+  position:relative;
+}
+
+/* aurora backdrop the glass panels sit on top of */
+.aurora{
+  position:fixed;
+  inset:0;
+  z-index:-2;
+  overflow:hidden;
+  background:radial-gradient(120% 100% at 50% 0%, var(--bg-1) 0%, var(--bg-0) 60%);
+}
+.aurora span{
+  position:absolute;
+  border-radius:50%;
+  filter:blur(90px);
+  opacity:.55;
+}
+.aurora .b1{width:620px;height:620px;background:var(--violet);top:-220px;left:-160px;animation:drift1 26s ease-in-out infinite alternate;}
+.aurora .b2{width:560px;height:560px;background:var(--cyan);bottom:-260px;right:-140px;animation:drift2 30s ease-in-out infinite alternate;}
+.aurora .b3{width:420px;height:420px;background:var(--magenta);top:35%;left:55%;opacity:.28;animation:drift3 34s ease-in-out infinite alternate;}
+
+:root[data-theme="light"] .aurora span{opacity:.30;filter:blur(110px)}
+
+@keyframes drift1{from{transform:translate(0,0)}to{transform:translate(60px,40px)}}
+@keyframes drift2{from{transform:translate(0,0)}to{transform:translate(-50px,-30px)}}
+@keyframes drift3{from{transform:translate(0,0)}to{transform:translate(-40px,50px)}}
+
+@media (prefers-reduced-motion: reduce){
+  .aurora span{animation:none}
+}
+
+a{color:inherit}
+img{max-width:100%;display:block}
+button{font:inherit;cursor:pointer}
+input,textarea,select{font:inherit}
+
+::selection{background:var(--violet);color:#fff}
+
+/* =========================================================
+   GLASS PRIMITIVE
+========================================================= */
+
+.glass{
+  background:var(--glass-fill);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-lg);
+  backdrop-filter:blur(22px) saturate(140%);
+  -webkit-backdrop-filter:blur(22px) saturate(140%);
+  box-shadow:var(--shadow-glass);
+}
+
+/* =========================================================
+   LAYOUT
+========================================================= */
+
+.wrap{
+  width:min(1080px, calc(100% - 40px));
+  margin-inline:auto;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+header{
+  padding:26px 0 10px;
+}
+
+.header-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:11px;
+}
+
+.brand-mark{
+  width:38px;height:38px;
+  border-radius:11px;
+  display:grid;place-items:center;
+  background:linear-gradient(135deg,var(--cyan),var(--violet));
+  color:#0a0e1a;
+  font-weight:700;
+  font-size:16px;
+  flex:0 0 auto;
+}
+
+.brand-text{
+  font-weight:700;
+  font-size:17px;
+  letter-spacing:-.01em;
+}
+.brand-text small{
+  display:block;
+  font-weight:400;
+  font-size:11px;
+  color:var(--ink-faint);
+  letter-spacing:.02em;
+}
+
+.theme-toggle{
+  width:42px;height:42px;
+  border-radius:50%;
+  border:1px solid var(--glass-border);
+  background:var(--glass-fill);
+  display:grid;place-items:center;
+  color:var(--ink-dim);
+  transition:.2s;
+}
+.theme-toggle:hover{border-color:var(--glass-border-bright);color:var(--ink)}
+.theme-toggle svg{width:17px;height:17px}
+
+/* =========================================================
+   HERO
+========================================================= */
+
+.hero{
+  padding:52px 0 34px;
+}
+
+.hero h1{
+  font-size:clamp(32px,4.6vw,50px);
+  line-height:1.06;
+  letter-spacing:-.03em;
+  font-weight:700;
+  max-width:680px;
+}
+
+.hero h1 .grad{
+  background:linear-gradient(100deg,var(--cyan),var(--violet) 60%,var(--magenta));
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+}
+
+.hero p{
+  margin-top:16px;
+  max-width:560px;
+  color:var(--ink-dim);
+  font-size:15px;
+  line-height:1.65;
+}
+
+.hero-facts{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:22px;
+}
+
+.fact{
+  padding:8px 14px;
+  border-radius:999px;
+  font-size:11.5px;
+  color:var(--ink-dim);
+  background:var(--glass-fill);
+  border:1px solid var(--glass-border);
+}
+.fact b{color:var(--ink);font-weight:600}
+
+/* =========================================================
+   TOOL PANEL
+========================================================= */
+
+.tool{
+  margin-top:8px;
+  padding:8px;
+  overflow:hidden;
+}
+
+.tool-inner{
+  padding:26px;
+}
+
+@media(min-width:760px){
+  .tool-inner{padding:34px}
+}
+
+.mode-switch{
+  display:inline-flex;
+  gap:4px;
+  padding:4px;
+  border-radius:999px;
+  background:var(--glass-fill-strong);
+  border:1px solid var(--glass-border);
+  margin-bottom:24px;
+}
+
+.mode-btn{
+  border:0;
+  background:transparent;
+  color:var(--ink-faint);
+  padding:9px 16px;
+  border-radius:999px;
+  font-size:12.5px;
+  font-weight:600;
+  letter-spacing:.01em;
+  transition:.18s;
+  white-space:nowrap;
+}
+.mode-btn.active{
+  background:var(--ink);
+  color:var(--bg-0);
+}
+.mode-btn:not(.active):hover{color:var(--ink)}
+
+.mode-pane{display:none}
+.mode-pane.active{display:block}
+
+.field{
+  margin-bottom:16px;
+}
+.field label{
+  display:block;
+  font-size:12px;
+  font-weight:600;
+  color:var(--ink-dim);
+  margin-bottom:8px;
+}
+.field .hint{
+  font-weight:400;
+  color:var(--ink-faint);
+}
+
+.input, .textarea{
+  width:100%;
+  border-radius:var(--radius-md);
+  border:1px solid var(--glass-border);
+  background:var(--glass-fill);
+  color:var(--ink);
+  padding:14px 16px;
+  outline:0;
+  transition:border-color .18s, background .18s;
+}
+.input::placeholder,.textarea::placeholder{color:var(--ink-faint)}
+.input:focus,.textarea:focus{
+  border-color:var(--cyan);
+  background:var(--glass-fill-strong);
+}
+
+.textarea{
+  min-height:170px;
+  resize:vertical;
+  font-family:var(--mono);
+  font-size:12.5px;
+  line-height:1.7;
+}
+
+.row-2{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:14px;
+}
+@media(max-width:640px){.row-2{grid-template-columns:1fr}}
+
+.dropzone{
+  border:1.5px dashed var(--glass-border-bright);
+  border-radius:var(--radius-md);
+  padding:34px 20px;
+  text-align:center;
+  cursor:pointer;
+  transition:.18s;
+}
+.dropzone:hover, .dropzone.drag{
+  background:var(--glass-fill);
+  border-color:var(--cyan);
+}
+.dropzone .dz-icon{
+  width:46px;height:46px;
+  margin:0 auto 14px;
+  border-radius:50%;
+  display:grid;place-items:center;
+  background:var(--glass-fill-strong);
+  color:var(--cyan);
+}
+.dz-title{font-weight:600;font-size:14px}
+.dz-copy{margin-top:6px;font-size:12px;color:var(--ink-faint);max-width:280px;margin-inline:auto;line-height:1.6}
+.dz-filename{margin-top:12px;font-family:var(--mono);font-size:11.5px;color:var(--cyan)}
+
+.check-row{
+  display:flex;
+  align-items:center;
+  gap:9px;
+  margin:16px 0 22px;
+  font-size:12.5px;
+  color:var(--ink-dim);
+}
+.check-row input{accent-color:var(--cyan);width:16px;height:16px}
+
+.primary-btn{
+  width:100%;
+  border:0;
+  border-radius:999px;
+  padding:16px;
+  font-weight:600;
+  font-size:13.5px;
+  letter-spacing:.01em;
+  background:linear-gradient(100deg,var(--cyan),var(--violet));
+  color:#0a0e1a;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  transition:transform .15s, box-shadow .15s, opacity .15s;
+}
+.primary-btn:hover{transform:translateY(-2px);box-shadow:0 14px 30px -12px rgba(141,123,245,.55)}
+.primary-btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.primary-btn svg{width:15px;height:15px}
+
+.disclaimer{
+  margin-top:14px;
+  font-size:11.5px;
+  line-height:1.65;
+  color:var(--ink-faint);
+}
+
+/* =========================================================
+   LOG TERMINAL
+========================================================= */
+
+.log-panel{
+  margin-top:22px;
+  overflow:hidden;
+  display:none;
+}
+.log-panel.show{display:block}
+
+.log-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 18px;
+  border-bottom:1px solid var(--glass-border);
+}
+.log-dots span{
+  width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:5px;
+}
+.d-red{background:#f2617a}.d-amber{background:#f5b855}.d-green{background:#59e6d9}
+
+.log-status{
+  font-family:var(--mono);
+  font-size:10.5px;
+  letter-spacing:.05em;
+  color:var(--ink-faint);
+}
+
+.log-body{
+  padding:16px 18px;
+  height:190px;
+  overflow-y:auto;
+  font-family:var(--mono);
+  font-size:12px;
+  line-height:1.85;
+}
+.log-body p{color:var(--ink-dim)}
+.log-ok{color:var(--cyan) !important}
+.log-warn{color:var(--amber) !important}
+.log-err{color:var(--danger) !important}
+.log-head-2{color:var(--ink) !important;font-weight:600}
+
+.progress-track{
+  height:3px;
+  background:var(--glass-border);
+  overflow:hidden;
+}
+.progress-bar{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,var(--cyan),var(--violet));
+  transition:width .25s ease;
+}
+
+/* =========================================================
+   RESULTS
+========================================================= */
+
+.results{
+  margin-top:26px;
+  display:none;
+}
+.results.show{display:block}
+
+.results-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+  margin-bottom:18px;
+}
+
+.results-title{
+  font-size:15px;
+  font-weight:600;
+}
+.results-sub{
+  margin-top:4px;
+  font-size:12px;
+  color:var(--ink-faint);
+}
+
+.download-group{
+  display:flex;
+  flex-wrap:wrap;
+  gap:9px;
+}
+
+.dl-btn{
+  border:1px solid var(--glass-border);
+  background:var(--glass-fill);
+  color:var(--ink);
+  padding:10px 15px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:600;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  transition:.18s;
+}
+.dl-btn svg{width:13px;height:13px}
+.dl-btn:hover{border-color:var(--glass-border-bright);background:var(--glass-fill-strong)}
+.dl-btn.primary{
+  background:var(--ink);
+  color:var(--bg-0);
+  border-color:var(--ink);
+}
+.dl-btn.primary:hover{opacity:.88}
+.dl-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.stat-strip{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:1px;
+  background:var(--glass-border);
+  border:1px solid var(--glass-border);
+  border-radius:var(--radius-md);
+  overflow:hidden;
+  margin-bottom:20px;
+}
+.stat{
+  background:var(--glass-fill);
+  padding:16px;
+}
+@media(max-width:640px){.stat-strip{grid-template-columns:repeat(2,1fr)}}
+.stat-strip-5{grid-template-columns:repeat(5,1fr)}
+@media(max-width:760px){.stat-strip-5{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:460px){.stat-strip-5{grid-template-columns:repeat(2,1fr)}}
+.stat-num{font-size:22px;font-weight:700;font-family:var(--mono)}
+.stat-label{margin-top:3px;font-size:10.5px;color:var(--ink-faint);letter-spacing:.03em}
+
+.gallery{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+  gap:10px;
+  max-height:520px;
+  overflow-y:auto;
+  padding-right:4px;
+}
+.g-card{
+  border:1px solid var(--glass-border);
+  background:var(--glass-fill);
+  border-radius:var(--radius-sm);
+  padding:6px;
+  transition:.15s;
+}
+.g-card:hover{border-color:var(--glass-border-bright)}
+.g-card img{
+  width:100%;height:110px;
+  object-fit:cover;
+  border-radius:6px;
+  background:var(--glass-fill-strong);
+}
+.g-card button{
+  width:100%;
+  margin-top:6px;
+  border:0;
+  background:transparent;
+  color:var(--ink-dim);
+  font-size:10.5px;
+  padding:7px 0;
+  border-radius:6px;
+  transition:.15s;
+}
+.g-card button:hover{background:var(--glass-fill-strong);color:var(--ink)}
+
+/* =========================================================
+   HOW IT WORKS
+========================================================= */
+
+.how{
+  padding:70px 0 30px;
+}
+.how-head{
+  max-width:520px;
+  margin-bottom:34px;
+}
+.how-head h2{
+  font-size:clamp(24px,3.2vw,32px);
+  letter-spacing:-.02em;
+  font-weight:700;
+}
+.how-head p{
+  margin-top:12px;
+  color:var(--ink-dim);
+  font-size:13.5px;
+  line-height:1.7;
+}
+
+.how-grid{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:12px;
+}
+@media(max-width:900px){.how-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.how-grid{grid-template-columns:1fr}}
+
+.how-card{
+  padding:22px 20px;
+}
+.how-num{
+  font-family:var(--mono);
+  font-size:11px;
+  color:var(--cyan);
+}
+.how-card h3{
+  margin-top:32px;
+  font-size:15.5px;
+  font-weight:600;
+  letter-spacing:-.01em;
+}
+.how-card p{
+  margin-top:8px;
+  font-size:12px;
+  color:var(--ink-faint);
+  line-height:1.65;
+}
+
+/* =========================================================
+   NOTE / LIMITS
+========================================================= */
+
+.limits{
+  margin:34px 0 60px;
+  padding:22px 24px;
+  display:flex;
+  gap:16px;
+  align-items:flex-start;
+}
+.limits svg{
+  width:20px;height:20px;
+  flex:0 0 auto;
+  color:var(--amber);
+  margin-top:2px;
+}
+.limits h3{font-size:13.5px;font-weight:600;margin-bottom:6px}
+.limits p{font-size:12.5px;color:var(--ink-dim);line-height:1.7;max-width:640px}
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+footer{
+  padding:26px 0 50px;
+  border-top:1px solid var(--glass-border);
+}
+.footer-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:10px;
+  font-size:11.5px;
+  color:var(--ink-faint);
+}
+.footer-row .dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--cyan);
+  display:inline-block;margin-right:7px;
+}
+
+.hidden{display:none !important}
+
+.select{
+  width:100%;
+  border-radius:var(--radius-md);
+  border:1px solid var(--glass-border);
+  background:var(--glass-fill);
+  color:var(--ink);
+  padding:13px 16px;
+  outline:0;
+  appearance:none;
+  -webkit-appearance:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2393a0c2' stroke-width='2'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right 14px center;
+  background-size:15px;
+  transition:border-color .18s, background-color .18s;
+}
+.select:focus{border-color:var(--cyan);background-color:var(--glass-fill-strong)}
+.select option{background:var(--bg-1);color:var(--ink)}
+
+/* =========================================================
+   DEVTOOLS GUARD OVERLAY
+========================================================= */
+
+.devtools-overlay{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  background:rgba(4,6,14,.82);
+  backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);
+}
+.devtools-overlay.show{display:flex}
+.dt-card{
+  width:min(420px,100%);
+  padding:32px;
+  text-align:center;
+}
+.dt-card .dt-icon{
+  width:48px;height:48px;
+  margin:0 auto 16px;
+  border-radius:50%;
+  display:grid;place-items:center;
+  background:rgba(242,97,122,.14);
+  color:var(--danger);
+}
+.dt-card h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+.dt-card p{margin-top:10px;font-size:12.5px;color:var(--ink-dim);line-height:1.7}
+
+@media(max-width:480px){
+  .wrap{width:min(100%,calc(100% - 28px))}
+  .tool-inner{padding:20px}
+}
+</style>
+</head>
+<body>
+
+<div class="aurora"><span class="b1"></span><span class="b2"></span><span class="b3"></span></div>
+
+<div class="devtools-overlay" id="devtoolsOverlay">
+  <div class="dt-card glass">
+    <div class="dt-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="22" height="22"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M7 21h10"></path><path d="M9 9l3 3-3 3"></path></svg>
+    </div>
+    <h2>Developer tools are turned off here</h2>
+    <p>This page asks the browser to keep its inspector closed. Close the panel to keep using Siteforge — this is a simple deterrent, not real protection, and doesn't affect files you've already downloaded.</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header>
+    <div class="header-row">
+      <div class="brand">
+        <div class="brand-mark">SF</div>
+        <div class="brand-text">
+          Siteforge
+          <small>Local site &amp; asset extraction</small>
+        </div>
+      </div>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle light and dark appearance" type="button">
+        <svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2.6M12 18.9v2.6M4.5 12H1.9M22.1 12h-2.6M5.4 5.4l1.8 1.8M16.8 16.8l1.8 1.8M18.6 5.4l-1.8 1.8M7.2 16.8l-1.8 1.8"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <section class="hero">
+    <h1>Turn any page into a <span class="grad">project you can open.</span></h1>
+    <p>Point Siteforge at a URL, or hand it HTML directly, and it maps out the stylesheets, scripts and images referenced inside — then packages what your browser can reach into a clean local folder.</p>
+    <div class="hero-facts">
+      <div class="fact"><b>3</b> ways to bring in a page</div>
+      <div class="fact"><b>3</b> separate export bundles</div>
+      <div class="fact">Converts images to <b>PNG / JPG / WEBP</b></div>
+      <div class="fact">Runs <b>entirely in your browser</b></div>
+    </div>
+  </section>
+
+  <section class="tool glass">
+    <div class="tool-inner">
+
+      <div class="mode-switch" role="tablist">
+        <button class="mode-btn active" data-mode="url" type="button">Clone from URL</button>
+        <button class="mode-btn" data-mode="paste" type="button">Paste HTML</button>
+        <button class="mode-btn" data-mode="file" type="button">Upload file</button>
+      </div>
+
+      <!-- URL MODE -->
+      <div class="mode-pane active" data-pane="url">
+        <div class="field">
+          <label for="urlInput">Page address</label>
+          <input class="input" id="urlInput" type="url" placeholder="https://example.com" autocomplete="off">
+        </div>
+      </div>
+
+      <!-- PASTE MODE -->
+      <div class="mode-pane" data-pane="paste">
+        <div class="field">
+          <label for="baseUrlPaste">Site address <span class="hint">— used to resolve relative links and fetch its files</span></label>
+          <input class="input" id="baseUrlPaste" type="url" placeholder="https://example.com">
+        </div>
+        <div class="field">
+          <label for="pasteInput">HTML source</label>
+          <textarea class="textarea" id="pasteInput" placeholder="Paste the page's HTML source here..."></textarea>
+        </div>
+      </div>
+
+      <!-- FILE MODE -->
+      <div class="mode-pane" data-pane="file">
+        <div class="field">
+          <label for="baseUrlFile">Site address <span class="hint">— optional, only needed to fetch linked files and images</span></label>
+          <input class="input" id="baseUrlFile" type="url" placeholder="https://example.com">
+        </div>
+        <input type="file" id="fileInput" accept=".html,.htm" class="hidden">
+        <label class="dropzone" id="dropzone" for="fileInput">
+          <div class="dz-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4"></path><path d="m7 8 5-4 5 4"></path><path d="M4.5 15v3.2a1.8 1.8 0 0 0 1.8 1.8h11.4a1.8 1.8 0 0 0 1.8-1.8V15"></path></svg>
+          </div>
+          <div class="dz-title">Drop an .html file, or click to browse</div>
+          <div class="dz-copy">It's read entirely on your device — nothing is uploaded anywhere.</div>
+          <div class="dz-filename" id="fileNameLabel"></div>
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="formatSelect">Image export format <span class="hint">— converted locally using the canvas API</span></label>
+        <select class="select" id="formatSelect">
+          <option value="original" selected>Keep original format</option>
+          <option value="png">Convert all to PNG</option>
+          <option value="jpg">Convert all to JPG</option>
+          <option value="webp">Convert all to WEBP</option>
+        </select>
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="hdToggle" checked>
+        <label for="hdToggle">Try to recover full-resolution images (strip resize/crop/quality parameters)</label>
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="proxyToggle" checked>
+        <label for="proxyToggle">If a request is blocked, retry it through a public fallback proxy <span class="hint">— routes that one request's URL through allorigins.win</span></label>
+      </div>
+
+      <div class="check-row">
+        <input type="checkbox" id="fontsToggle" checked>
+        <label for="fontsToggle">Also fetch fonts and background images referenced inside stylesheets</label>
+      </div>
+
+      <button class="primary-btn" id="runBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l15-9L5 3z"></path></svg>
+        <span id="runBtnLabel">Extract project</span>
+      </button>
+
+      <p class="disclaimer">Siteforge tries a direct browser request first. If a site's server blocks that (no CORS headers), it retries just that one file through a public read-only proxy (allorigins.win), which fetches it server-side and hands it back — that covers most publicly accessible sites. It still can't reach anything that's login-gated, behind a paywall or bot-check, or rendered client-side by JavaScript the proxy doesn't execute. Fetched stylesheets and scripts are inlined directly into the exported index.html rather than saved as separate .js/.css files — that keeps things to a single working file and avoids antivirus tools flagging a standalone script. For sites built with React/Vite/Webpack-style code splitting, the main bundle is also scanned for references to other chunk files it loads at runtime; this catches many but not all bundler setups. If a page can't be reached at all, or has nothing to extract, Siteforge stops and tells you rather than producing a blank download. Image format conversion happens locally using the canvas API — SVG and GIF files are kept as-is rather than converted. Every fetch attempt is reported in the log below. This page also asks the browser to keep its inspector closed; that's a soft deterrent only, not real protection.</p>
+
+      <!-- LOG -->
+      <div class="glass log-panel" id="logPanel">
+        <div class="log-head">
+          <div class="log-dots"><span class="d-red"></span><span class="d-amber"></span><span class="d-green"></span></div>
+          <div class="log-status" id="logStatus">IDLE</div>
+        </div>
+        <div class="log-body" id="logBody"></div>
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+      </div>
+
+      <!-- RESULTS -->
+      <div class="results" id="results">
+        <div class="results-head">
+          <div>
+            <div class="results-title">Project ready</div>
+            <div class="results-sub" id="resultsSub">Choose what to download.</div>
+          </div>
+          <div class="download-group">
+            <button class="dl-btn" id="dlImages" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="9" r="1.5"></circle><path d="m21 15-5-5L5 21"></path></svg>
+              Images only (.zip)
+            </button>
+            <button class="dl-btn" id="dlSite" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"></path><path d="M4 9h16"></path><path d="M9 9v11"></path></svg>
+              Site files (.zip)
+            </button>
+            <button class="dl-btn primary" id="dlAll" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"></path><path d="m7 11 5 5 5-5"></path><path d="M4.5 19h15"></path></svg>
+              Everything (.zip)
+            </button>
+          </div>
+        </div>
+
+        <div class="stat-strip stat-strip-5">
+          <div class="stat"><div class="stat-num" id="statCss">0</div><div class="stat-label">STYLESHEETS</div></div>
+          <div class="stat"><div class="stat-num" id="statJs">0</div><div class="stat-label">SCRIPTS</div></div>
+          <div class="stat"><div class="stat-num" id="statImg">0</div><div class="stat-label">IMAGES FOUND</div></div>
+          <div class="stat"><div class="stat-num" id="statFonts">0</div><div class="stat-label">FONTS &amp; CSS ASSETS</div></div>
+          <div class="stat"><div class="stat-num" id="statFetched">0</div><div class="stat-label">FILES FETCHED</div></div>
+        </div>
+
+        <div class="gallery" id="gallery"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="how" id="how">
+    <div class="how-head">
+      <h2>What happens when you press extract</h2>
+      <p>The same pipeline runs no matter which input you use — only the first step changes.</p>
+    </div>
+    <div class="how-grid">
+      <article class="how-card glass">
+        <div class="how-num">01</div>
+        <h3>Bring in the markup</h3>
+        <p>Fetched from a live URL, pasted directly, or read from a file on your device.</p>
+      </article>
+      <article class="how-card glass">
+        <div class="how-num">02</div>
+        <h3>Map the references</h3>
+        <p>Stylesheet links, script tags, and image sources — including srcset, lazy-load attributes and inline base64 — are located and resolved to full URLs.</p>
+      </article>
+      <article class="how-card glass">
+        <div class="how-num">03</div>
+        <h3>Fetch what's reachable</h3>
+        <p>Every CORS-permitted stylesheet and script is inlined straight into index.html — no loose .js/.css files for anything to quarantine — and the main bundle is scanned for sibling chunk files it references, since React/Vite/Webpack builds often split code across several files.</p>
+      </article>
+      <article class="how-card glass">
+        <div class="how-num">04</div>
+        <h3>Package it up</h3>
+        <p>Download the images on their own, the self-contained HTML on its own, or one combined project folder.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="limits glass">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path></svg>
+    <div>
+      <h3>Good to know</h3>
+      <p>This runs entirely client-side — there's no server involved, and nothing you enter leaves your browser except the requests it makes to fetch the files you asked for, plus a request to allorigins.win when a file needs the fallback proxy. Windows or your antivirus may flag a downloaded `.js` file with a reputation warning (e.g. SmartScreen) simply because it's an unsigned file freshly built in a browser-generated ZIP, not from a known publisher — that's a false positive common to any browser-side ZIP containing scripts, not a sign the file is unsafe; choosing "run anyway" or unblocking it in file properties resolves it. The inspector-blocking on this page is a UI deterrent, not a security boundary — it's trivially bypassed by disabling JavaScript, using browser devtools' own protections, or viewing source another way, so don't rely on it to hide anything sensitive. Respect the terms of any site you extract from; this tool is meant for your own projects, backups, and learning from publicly available front-end code, not for republishing someone else's work as your own.</p>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-row">
+      <span><span class="dot"></span>Local engine ready</span>
+      <span>Siteforge — runs entirely in your browser</span>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+/* =========================================================
+   STATE
+========================================================= */
+
+let currentMode = "url";
+let uploadedFileText = null;
+let uploadedFileName = "";
+
+let lastResult = null; // { htmlDoc, css, js, images:[{name,blob|dataUrl,ext}], cssFetched, jsFetched }
+
+/* =========================================================
+   THEME
+========================================================= */
+
+const root = document.documentElement;
+const themeToggle = document.getElementById("themeToggle");
+
+function applyTheme(mode){
+  if(mode === "light"){ root.setAttribute("data-theme","light"); }
+  else { root.removeAttribute("data-theme"); }
+}
+(function initTheme(){
+  const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+  applyTheme(prefersLight ? "light" : "dark");
+})();
+themeToggle.addEventListener("click", () => {
+  const isLight = root.getAttribute("data-theme") === "light";
+  applyTheme(isLight ? "dark" : "light");
+});
+
+/* =========================================================
+   MODE SWITCHING
+========================================================= */
+
+document.querySelectorAll(".mode-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".mode-btn").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".mode-pane").forEach(p=>p.classList.remove("active"));
+    btn.classList.add("active");
+    currentMode = btn.dataset.mode;
+    document.querySelector('.mode-pane[data-pane="'+currentMode+'"]').classList.add("active");
+  });
+});
+
+/* =========================================================
+   FILE INPUT
+========================================================= */
+
+const fileInput = document.getElementById("fileInput");
+const dropzone = document.getElementById("dropzone");
+const fileNameLabel = document.getElementById("fileNameLabel");
+
+fileInput.addEventListener("change", async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  uploadedFileName = file.name;
+  fileNameLabel.textContent = "Loaded: " + file.name;
+  uploadedFileText = await file.text();
+});
+
+["dragover","dragenter"].forEach(evt=>{
+  dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.add("drag"); });
+});
+["dragleave","drop"].forEach(evt=>{
+  dropzone.addEventListener(evt, e=>{ e.preventDefault(); dropzone.classList.remove("drag"); });
+});
+dropzone.addEventListener("drop", async (e)=>{
+  const file = e.dataTransfer.files[0];
+  if(!file) return;
+  uploadedFileName = file.name;
+  fileNameLabel.textContent = "Loaded: " + file.name;
+  uploadedFileText = await file.text();
+});
+
+/* =========================================================
+   LOG / PROGRESS
+========================================================= */
+
+const logPanel = document.getElementById("logPanel");
+const logBody = document.getElementById("logBody");
+const logStatus = document.getElementById("logStatus");
+const progressBar = document.getElementById("progressBar");
+
+function resetLog(){
+  logBody.innerHTML = "";
+  logPanel.classList.add("show");
+  progressBar.style.width = "0%";
+  logStatus.textContent = "RUNNING";
+}
+function log(text, cls){
+  const p = document.createElement("p");
+  if(cls) p.className = cls;
+  p.textContent = text;
+  logBody.appendChild(p);
+  logBody.scrollTop = logBody.scrollHeight;
+}
+function setProgress(n){ progressBar.style.width = n + "%"; }
+function delay(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function normalizeUrl(v){
+  if(!v) return "";
+  if(!/^https?:\/\//i.test(v)) v = "https://" + v;
+  return new URL(v).href;
+}
+
+function safeExt(mimeOrPath, fallback){
+  let ext = fallback || "png";
+  if(mimeOrPath && mimeOrPath.includes("/")){
+    ext = mimeOrPath.split("/")[1].split(";")[0];
+  } else if(mimeOrPath && mimeOrPath.includes(".")){
+    ext = mimeOrPath.split(".").pop().split("?")[0];
+  }
+  if(ext === "jpeg") ext = "jpg";
+  return ext.replace(/[^a-z0-9]/gi,"").slice(0,5) || "png";
+}
+
+function convertToHdUrl(urlString){
+  try{
+    const url = new URL(urlString);
+    ["w","h","width","height","quality","fit","crop","resize","dpr","q"].forEach(p=>url.searchParams.delete(p));
+    url.pathname = url.pathname.replace(/-\d+x\d+(?=\.(jpg|jpeg|png|webp|gif|avif))/i,"");
+    return url.toString();
+  }catch(e){ return urlString; }
+}
+
+function sanitizeBase64(data){
+  let clean = data.replace(/[\s\r\n]+/g,"");
+  while(clean.length % 4 !== 0) clean += "=";
+  return clean;
+}
+
+function escapeHTML(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+const PROXY_PREFIX = "https://api.allorigins.win/raw?url=";
+let useProxyFallback = true;
+
+/**
+ * Fetches a URL directly; if that fails (typically a CORS block), retries
+ * once through a public read-only proxy so more sites can be pulled in.
+ * Returns { ok, response, viaProxy } — never throws.
+ */
+async function smartFetch(url){
+  try{
+    const r = await fetch(url, { mode:"cors", redirect:"follow" });
+    if(r.ok) return { ok:true, response:r, viaProxy:false };
+  }catch(e){ /* likely CORS or network — fall through to proxy */ }
+
+  if(!useProxyFallback) return { ok:false, response:null, viaProxy:false };
+
+  try{
+    const r = await fetch(PROXY_PREFIX + encodeURIComponent(url));
+    if(r.ok) return { ok:true, response:r, viaProxy:true };
+    return { ok:false, response:null, viaProxy:true };
+  }catch(e){
+    return { ok:false, response:null, viaProxy:true };
+  }
+}
+
+function triggerSave(blob, filename){
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+}
+
+/* =========================================================
+   DEVTOOLS GUARD (soft deterrent only — see disclaimer in UI)
+========================================================= */
+
+(function guardDevTools(){
+  const overlay = document.getElementById("devtoolsOverlay");
+
+  document.addEventListener("contextmenu", e => e.preventDefault());
+
+  document.addEventListener("keydown", e => {
+    const k = e.key;
+    if(k === "F12"){ e.preventDefault(); return; }
+    if(e.ctrlKey && e.shiftKey && ["I","i","J","j","C","c"].includes(k)){ e.preventDefault(); return; }
+    if(e.ctrlKey && ["U","u"].includes(k)){ e.preventDefault(); return; }
+  });
+
+  // A large, sustained gap between outer and inner window size is a reasonable
+  // signal that a docked devtools panel is open — but zoom level, OS display
+  // scaling, and some window managers can produce a smaller, one-off gap on
+  // their own. Requiring several consecutive readings above a higher threshold
+  // avoids flagging those normal cases.
+  const threshold = 260;
+  const requiredStreak = 3;
+  let streak = 0;
+
+  setInterval(() => {
+    const widthDiff = window.outerWidth - window.innerWidth > threshold;
+    const heightDiff = window.outerHeight - window.innerHeight > threshold;
+
+    if(widthDiff || heightDiff){
+      streak++;
+    } else {
+      streak = 0;
+      overlay.classList.remove("show");
+      return;
+    }
+
+    if(streak >= requiredStreak){
+      overlay.classList.add("show");
+    }
+  }, 700);
+})();
+
+/* =========================================================
+   FILENAME HELPERS
+========================================================= */
+
+function filenameFromUrl(url, fallbackBase, fallbackExt){
+  try{
+    const u = new URL(url);
+    let base = u.pathname.split("/").filter(Boolean).pop() || (fallbackBase + "." + fallbackExt);
+    base = base.split("?")[0].split("#")[0];
+    base = base.replace(/[^a-zA-Z0-9._-]/g, "_");
+    if(!base.includes(".")) base += "." + fallbackExt;
+    return base.slice(0,120);
+  }catch(e){
+    return fallbackBase + "." + fallbackExt;
+  }
+}
+
+function uniqueName(name, usedNames){
+  if(!usedNames.has(name)){ usedNames.add(name); return name; }
+  const dot = name.lastIndexOf(".");
+  const base = dot === -1 ? name : name.slice(0,dot);
+  const ext = dot === -1 ? "" : name.slice(dot);
+  let i = 2, candidate = base + "-" + i + ext;
+  while(usedNames.has(candidate)){ i++; candidate = base + "-" + i + ext; }
+  usedNames.add(candidate);
+  return candidate;
+}
+
+/* =========================================================
+   IMAGE FORMAT CONVERSION (canvas — SVG/GIF kept as-is)
+========================================================= */
+
+function convertImageBlob(blob, format){
+  return new Promise(resolve=>{
+    if(format === "original" || blob.type === "image/svg+xml" || blob.type === "image/gif"){
+      resolve({ blob, ext: safeExt(blob.type,"png") });
+      return;
+    }
+    const mimeMap = { png:"image/png", jpg:"image/jpeg", webp:"image/webp" };
+    const targetMime = mimeMap[format];
+    if(!targetMime){ resolve({ blob, ext: safeExt(blob.type,"png") }); return; }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const im = new Image();
+    im.onload = () => {
+      try{
+        const canvas = document.createElement("canvas");
+        canvas.width = im.naturalWidth || 1;
+        canvas.height = im.naturalHeight || 1;
+        const ctx = canvas.getContext("2d");
+        if(format === "jpg"){ ctx.fillStyle = "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height); }
+        ctx.drawImage(im,0,0);
+        canvas.toBlob(newBlob=>{
+          URL.revokeObjectURL(objectUrl);
+          if(newBlob) resolve({ blob:newBlob, ext:format });
+          else resolve({ blob, ext: safeExt(blob.type,"png") });
+        }, targetMime, 0.92);
+      }catch(e){
+        URL.revokeObjectURL(objectUrl);
+        resolve({ blob, ext: safeExt(blob.type,"png") });
+      }
+    };
+    im.onerror = () => { URL.revokeObjectURL(objectUrl); resolve({ blob, ext: safeExt(blob.type,"png") }); };
+    im.src = objectUrl;
+  });
+}
+
+/* =========================================================
+   ASSET DISCOVERY (from a parsed document + base url)
+========================================================= */
+
+function discoverAssets(doc, baseUrl){
+  const cssItems = [];
+  const jsItems = [];
+  const images = new Set();
+  const base64Images = new Set();
+
+  doc.querySelectorAll('link[rel="stylesheet"][href]').forEach(el=>{
+    try{ cssItems.push({ url:new URL(el.getAttribute("href"), baseUrl || location.href).href, el }); }catch(e){}
+  });
+
+  doc.querySelectorAll("script[src]").forEach(el=>{
+    try{ jsItems.push({ url:new URL(el.getAttribute("src"), baseUrl || location.href).href, el }); }catch(e){}
+  });
+
+  const attrs = ["src","data-src","data-full-src","data-original","srcset"];
+  doc.querySelectorAll("img").forEach(el=>{
+    attrs.forEach(attr=>{
+      const raw = el.getAttribute(attr);
+      if(!raw) return;
+      const candidates = attr === "srcset"
+        ? raw.split(",").map(s=>s.trim().split(/\s+/)[0])
+        : [raw.trim()];
+      candidates.forEach(source=>{
+        if(!source) return;
+        if(source.startsWith("data:image/")){
+          if(source.length > 50) base64Images.add(source.replace(/\s+/g,""));
+          return;
+        }
+        try{
+          let resolved;
+          if(source.startsWith("//")) resolved = "https:" + source;
+          else resolved = new URL(source, baseUrl || location.href).href;
+          images.add(resolved);
+        }catch(e){}
+      });
+    });
+  });
+
+  // background-image in inline styles
+  doc.querySelectorAll('[style*="background"]').forEach(el=>{
+    const m = (el.getAttribute("style")||"").match(/url\((['"]?)(.*?)\1\)/);
+    if(m && m[2] && !m[2].startsWith("data:")){
+      try{ images.add(new URL(m[2], baseUrl || location.href).href); }catch(e){}
+    }
+  });
+
+  // favicon
+  let favicon = null;
+  const iconEl = doc.querySelector('link[rel~="icon"][href]');
+  if(iconEl){
+    try{ favicon = new URL(iconEl.getAttribute("href"), baseUrl || location.href).href; }catch(e){}
+  }
+
+  return { cssItems, jsItems, images:[...images], base64Images:[...base64Images], favicon };
+}
+
+/* =========================================================
+   FONT / BACKGROUND-ASSET EXTRACTION FROM CSS TEXT
+========================================================= */
+
+const FONT_EXT_RE = /\.(woff2?|ttf|otf|eot)(\?|#|$)/i;
+const IMG_EXT_RE = /\.(png|jpe?g|gif|webp|svg|avif)(\?|#|$)/i;
+
+/**
+ * Scans a stylesheet's text for url(...) references, fetches the ones that
+ * point at fonts or images, rewrites the CSS to point at local relative
+ * paths, and returns the updated text plus the fetched asset list.
+ */
+async function extractCssAssets(cssText, cssFileUrl, usedNames, log){
+  const urlRe = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+  const found = new Map(); // absolute url -> { localPath, kind }
+  let match;
+  const matches = [];
+  while((match = urlRe.exec(cssText)) !== null){
+    const raw = match[2].trim();
+    if(!raw || raw.startsWith("data:")) continue;
+    matches.push(raw);
+  }
+
+  for(const raw of matches){
+    let absolute;
+    try{ absolute = raw.startsWith("//") ? "https:"+raw : new URL(raw, cssFileUrl).href; }
+    catch(e){ continue; }
+    if(found.has(absolute)) continue;
+
+    const isFont = FONT_EXT_RE.test(absolute);
+    const isImg = IMG_EXT_RE.test(absolute);
+    if(!isFont && !isImg) continue;
+
+    const { ok, response } = await smartFetch(absolute);
+    if(!ok) continue;
+    const blob = await response.blob();
+    const kind = isFont ? "fonts" : "css-assets";
+    const name = uniqueName(filenameFromUrl(absolute, kind, isFont ? "woff2" : "png"), usedNames);
+    found.set(absolute, { localPath: kind + "/" + name, blob, kind, name });
+  }
+
+  let updatedText = cssText;
+  found.forEach((info, absolute)=>{
+    const escaped = absolute.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    updatedText = updatedText.split(absolute).join("../" + info.localPath);
+  });
+
+  return { updatedText, assets:[...found.values()] };
+}
+
+function escapeForInlineScript(code){
+  return code.replace(/<\/(script)/gi, "<\\/$1");
+}
+function escapeForInlineStyle(code){
+  return code.replace(/<\/(style)/gi, "<\\/$1");
+}
+
+/**
+ * Scans a fetched JS file's text for likely references to sibling bundler
+ * chunk files (common with Vite/Webpack code-splitting, where the entry
+ * bundle in the raw HTML pulls in other .js/.css chunks at runtime via
+ * dynamic import — invisible to a plain HTML parser). This is a heuristic,
+ * not a real module resolver: it catches many common patterns but not every
+ * bundler's output, especially heavily obfuscated ones.
+ */
+function findChunkReferences(jsText, scriptUrl){
+  const re = /["'](\.{1,2}\/[^"'<>\s]{1,140}?\.(?:js|mjs|css)|\/[^"'<>\s]{3,140}?\.(?:js|mjs|css))["']/g;
+  const found = new Set();
+  let m;
+  while((m = re.exec(jsText)) !== null){
+    try{
+      const abs = new URL(m[1], scriptUrl).href;
+      found.add(abs);
+    }catch(e){}
+  }
+  return [...found];
+}
+
+/* =========================================================
+   MAIN PIPELINE
+========================================================= */
+
+async function runPipeline(){
+  const runBtn = document.getElementById("runBtn");
+  const hdToggle = document.getElementById("hdToggle").checked;
+  useProxyFallback = document.getElementById("proxyToggle").checked;
+
+  let rawHtml = "";
+  let baseUrl = "";
+  let fetchedLive = false;
+
+  if(currentMode === "url"){
+    const val = document.getElementById("urlInput").value.trim();
+    if(!val){ alert("Enter a URL first."); return; }
+    try{ baseUrl = normalizeUrl(val); }catch(e){ alert("That doesn't look like a valid URL."); return; }
+  } else if(currentMode === "paste"){
+    rawHtml = document.getElementById("pasteInput").value;
+    const bv = document.getElementById("baseUrlPaste").value.trim();
+    if(!rawHtml.trim()){ alert("Paste some HTML first."); return; }
+    if(bv){ try{ baseUrl = normalizeUrl(bv); }catch(e){} }
+  } else if(currentMode === "file"){
+    if(!uploadedFileText){ alert("Choose an .html file first."); return; }
+    rawHtml = uploadedFileText;
+    const bv = document.getElementById("baseUrlFile").value.trim();
+    if(bv){ try{ baseUrl = normalizeUrl(bv); }catch(e){} }
+  }
+
+  runBtn.disabled = true;
+  document.getElementById("runBtnLabel").textContent = "Working…";
+  document.getElementById("results").classList.remove("show");
+  resetLog();
+  setProgress(4);
+
+  // STEP 1 — get the HTML
+  if(currentMode === "url"){
+    log("Requesting " + baseUrl);
+    const { ok, response, viaProxy } = await smartFetch(baseUrl);
+    if(ok){
+      rawHtml = await response.text();
+      fetchedLive = true;
+      log(viaProxy ? "Direct request was blocked — retrieved via fallback proxy instead." : "Page received.", "log-ok");
+    } else {
+      log("The page could not be reached directly or through the fallback proxy.", "log-err");
+      log("This usually means the site blocks all cross-origin access, requires a login, or is rate-limiting requests.", "log-err");
+      logStatus.textContent = "FAILED";
+      setProgress(0);
+      runBtn.disabled = false;
+      document.getElementById("runBtnLabel").textContent = "Extract project";
+      alert("Couldn't retrieve this page — nothing was downloaded. Try a different URL, or use \"Paste HTML\" if you already have the source.");
+      return;
+    }
+  } else {
+    log("Reading provided HTML (" + rawHtml.length.toLocaleString() + " characters).");
+  }
+
+  await delay(200);
+  setProgress(20);
+
+  // STEP 2 — parse & discover
+  log("Parsing document structure…");
+  const doc = new DOMParser().parseFromString(rawHtml, "text/html");
+  const { cssItems, jsItems, images: imgUrls, base64Images, favicon } = discoverAssets(doc, baseUrl);
+  log("Found " + cssItems.length + " stylesheet(s), " + jsItems.length + " script(s), " + (imgUrls.length + base64Images.length) + " image reference(s).", "log-ok");
+
+  const bodyTextLength = (doc.body ? doc.body.textContent.trim().replace(/\s+/g,"") : "").length;
+  const totalAssetsFound = cssItems.length + jsItems.length + imgUrls.length + base64Images.length;
+
+  if(bodyTextLength < 5 && totalAssetsFound === 0){
+    log("This document has no visible text and no stylesheets, scripts or images to extract.", "log-err");
+    logStatus.textContent = "FAILED";
+    setProgress(0);
+    runBtn.disabled = false;
+    document.getElementById("runBtnLabel").textContent = "Extract project";
+    alert("There's nothing here to extract — the source is essentially empty. Nothing was downloaded.");
+    return;
+  }
+
+  if(bodyTextLength < 30 && jsItems.length > 0){
+    log("The page's static HTML has almost no visible content but does load scripts — this often means content is rendered client-side by JavaScript (a single-page app). The exported HTML alone may look blank; the scripts are still captured below.", "log-warn");
+  }
+
+  document.getElementById("statCss").textContent = cssItems.length;
+  document.getElementById("statJs").textContent = jsItems.length;
+  document.getElementById("statImg").textContent = imgUrls.length + base64Images.length;
+
+  await delay(150);
+  setProgress(32);
+
+  const usedNames = new Set(["index.html","README.txt"]);
+  const fontAndCssAssets = [];
+  const fetchFontsToggle = document.getElementById("fontsToggle").checked;
+
+  // STEP 3 — fetch CSS and inline it directly into <style> tags.
+  // Inlining (rather than writing loose .css files) means opening the
+  // exported index.html is the only step needed, and there's no separate
+  // stylesheet file for anything to quarantine.
+  let cssFetched = 0;
+  let cssViaProxy = 0;
+  if(cssItems.length){
+    log("Fetching stylesheets…");
+    for(const item of cssItems.slice(0,40)){
+      const { ok, response, viaProxy } = await smartFetch(item.url);
+      if(ok){
+        let text = await response.text();
+        cssFetched++; if(viaProxy) cssViaProxy++;
+
+        if(fetchFontsToggle){
+          const { updatedText, assets } = await extractCssAssets(text, item.url, usedNames, log);
+          text = updatedText;
+          fontAndCssAssets.push(...assets);
+        }
+
+        const styleEl = doc.createElement("style");
+        styleEl.setAttribute("data-source", item.url);
+        styleEl.textContent = escapeForInlineStyle(text);
+        item.el.replaceWith(styleEl);
+      }
+      // if it failed, the original <link> tag (and its absolute href) is left in place untouched
+    }
+    log(cssFetched + " of " + cssItems.length + " stylesheet(s) fetched and inlined" + (cssViaProxy? " (" + cssViaProxy + " via proxy)":"") + ".", cssFetched? "log-ok":"log-warn");
+  }
+  setProgress(46);
+
+  // STEP 4 — fetch JS and inline it directly into <script> tags, in original
+  // order. Also makes one pass to chase likely bundler chunk files referenced
+  // only inside the JS itself (common with React/Vite/Webpack code-splitting).
+  let jsFetched = 0;
+  let jsViaProxy = 0;
+  let chunksFetched = 0;
+  const seenScriptUrls = new Set(jsItems.map(i=>i.url));
+  if(jsItems.length){
+    log("Fetching scripts…");
+    for(const item of jsItems.slice(0,40)){
+      const { ok, response, viaProxy } = await smartFetch(item.url);
+      if(ok){
+        const text = await response.text();
+        jsFetched++; if(viaProxy) jsViaProxy++;
+
+        const scriptEl = doc.createElement("script");
+        if(item.el.getAttribute("type") === "module") scriptEl.setAttribute("type","module");
+        scriptEl.setAttribute("data-source", item.url);
+        scriptEl.textContent = escapeForInlineScript(text);
+        item.el.replaceWith(scriptEl);
+
+        // chase sibling chunk files this bundle references
+        const chunkUrls = findChunkReferences(text, item.url).filter(u => !seenScriptUrls.has(u));
+        for(const chunkUrl of chunkUrls.slice(0,15)){
+          if(seenScriptUrls.size > 55) break;
+          seenScriptUrls.add(chunkUrl);
+          const chunkRes = await smartFetch(chunkUrl);
+          if(chunkRes.ok){
+            const chunkText = await chunkRes.response.text();
+            chunksFetched++;
+            const isCss = /\.css(\?|$)/i.test(chunkUrl);
+            const chunkEl = doc.createElement(isCss ? "style" : "script");
+            chunkEl.setAttribute("data-source", chunkUrl);
+            chunkEl.setAttribute("data-discovered-chunk", "true");
+            chunkEl.textContent = isCss ? escapeForInlineStyle(chunkText) : escapeForInlineScript(chunkText);
+            scriptEl.after(chunkEl);
+          }
+        }
+      }
+      // if it failed, the original <script src> tag is left in place, so CDN-hosted libraries (e.g. GSAP) still load and run when opened online
+    }
+    let chunkNote = chunksFetched ? (", plus " + chunksFetched + " additional bundle chunk(s) discovered inside the fetched scripts") : "";
+    log(jsFetched + " of " + jsItems.length + " script(s) fetched and inlined" + (jsViaProxy? " (" + jsViaProxy + " via proxy)":"") + chunkNote + "; unreachable scripts were left pointing at their original source.", jsFetched? "log-ok":"log-warn");
+  }
+  setProgress(56);
+
+  // STEP 5 — fetch images
+  log("Fetching images…");
+  const images = [];
+  let imgIndex = 0;
+  const allImgUrls = imgUrls.map(u => hdToggle ? convertToHdUrl(u) : u);
+  const exportFormat = document.getElementById("formatSelect").value;
+
+  let imgViaProxy = 0;
+  let imgFailed = 0;
+  const imgUsedNames = new Set();
+  for(const url of allImgUrls){
+    imgIndex++;
+    const { ok, response, viaProxy } = await smartFetch(url);
+    if(ok){
+      const rawBlob = await response.blob();
+      const { blob, ext } = await convertImageBlob(rawBlob, exportFormat);
+      const name = uniqueName(filenameFromUrl(url, "image_" + imgIndex, ext), imgUsedNames);
+      images.push({ name, blob, previewUrl: (viaProxy || exportFormat !== "original") ? URL.createObjectURL(blob) : url });
+      if(viaProxy) imgViaProxy++;
+    } else {
+      imgFailed++;
+    }
+    if(imgIndex % 4 === 0) setProgress(58 + Math.round((imgIndex/Math.max(allImgUrls.length,1)) * 20));
+  }
+  if(imgViaProxy) log(imgViaProxy + " image(s) needed the fallback proxy.", "log-warn");
+  if(imgFailed) log(imgFailed + " image(s) could not be retrieved by any method.", "log-warn");
+  if(exportFormat !== "original") log("Converted retrieved raster images to " + exportFormat.toUpperCase() + " (vector and animated files were left untouched).", "log-ok");
+
+  base64Images.forEach((data, i)=>{
+    try{
+      const mime = data.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,/)[1];
+      const ext = safeExt(mime,"png");
+      const b64 = sanitizeBase64(data.split(",")[1]);
+      const byteChars = atob(b64);
+      const bytes = new Uint8Array(byteChars.length);
+      for(let j=0;j<byteChars.length;j++) bytes[j] = byteChars.charCodeAt(j);
+      const blob = new Blob([bytes], { type: mime });
+      const name = uniqueName("embedded_" + (i+1) + "." + ext, imgUsedNames);
+      images.push({ name, blob, previewUrl: URL.createObjectURL(blob) });
+    }catch(e){}
+  });
+
+  // favicon, fetched alongside images for convenience
+  let faviconFile = null;
+  if(favicon){
+    const { ok, response } = await smartFetch(favicon);
+    if(ok){
+      const blob = await response.blob();
+      faviconFile = { name: uniqueName(filenameFromUrl(favicon,"favicon","ico"), usedNames), blob };
+      doc.querySelectorAll('link[rel~="icon"]').forEach(el=>el.setAttribute("href","assets/" + faviconFile.name));
+    }
+  }
+
+  const totalFontCssAssets = fontAndCssAssets.length + (faviconFile ? 1 : 0);
+  document.getElementById("statFonts").textContent = totalFontCssAssets;
+  log(images.length + " of " + (allImgUrls.length + base64Images.length) + " image(s) successfully retrieved" + (totalFontCssAssets ? ", plus " + totalFontCssAssets + " font/CSS asset(s)" : "") + ".", images.length ? "log-ok" : "log-warn");
+  document.getElementById("statFetched").textContent = cssFetched + jsFetched + chunksFetched + images.length + totalFontCssAssets;
+  setProgress(86);
+
+  // STEP 6 — finalize the local copy (hrefs/srcs were already rewritten per-file above)
+  log("Finalizing local copy…");
+  const cleanedHtml = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+
+  const readme = "SITEFORGE PROJECT\n===================\n\nSource: " + (baseUrl || uploadedFileName || "pasted HTML") + "\nGenerated: " + new Date().toISOString() + "\nMode: " + currentMode + "\nFallback proxy: " + (useProxyFallback ? "enabled" : "disabled") + "\nImage format: " + exportFormat + "\n\nOpen index.html in a browser — that's it. Fetched stylesheets and scripts are inlined directly\ninside index.html (as <style> and <script> tags, in their original order) rather than shipped as\nseparate loose .js/.css files, so there's nothing extra to load and no standalone script file for\nan antivirus / SmartScreen reputation check to flag on extraction.\n\nassets/images/      - images found on the page\nassets/fonts/       - fonts referenced inside the fetched stylesheets\nassets/css-assets/  - background images referenced inside the fetched stylesheets\n\nAny stylesheet or script that couldn't be fetched (blocked, even through the proxy) was left as its\noriginal external tag pointing at its absolute URL, so it still loads when the page is opened with\nan internet connection — this matters for CDN-hosted libraries like GSAP.\n\nScripts tagged data-discovered-chunk=\"true\" were not linked from the raw HTML at all — they were\nfound by scanning the main bundle's own code for references to other chunk files, a common pattern\nin React/Vite/Webpack builds that split code into multiple pieces. This is a heuristic and won't\ncatch every bundler's output.\n\n" + (fetchedLive ? "The source document was fetched successfully." : "Some or all content may be incomplete if the source blocked cross-origin requests, even through the fallback proxy.") + "\n\nThis project was generated client-side by Siteforge.\n";
+
+  lastResult = {
+    html: cleanedHtml,
+    fontAndCssAssets,
+    faviconFile,
+    readme,
+    images,
+    stats:{ css: cssItems.length, js: jsItems.length, imgFound: imgUrls.length + base64Images.length, fetched: cssFetched + jsFetched + chunksFetched + images.length + totalFontCssAssets }
+  };
+
+  setProgress(100);
+  logStatus.textContent = "DONE";
+  log("Project ready.", "log-ok");
+
+  // render results
+  document.getElementById("resultsSub").textContent = images.length + " image(s) retrieved, " + (cssFetched+jsFetched) + " code file(s) fetched" + (totalFontCssAssets ? ", " + totalFontCssAssets + " font/CSS asset(s)" : "") + ".";
+  renderGallery(images);
+  document.getElementById("results").classList.add("show");
+
+  runBtn.disabled = false;
+  document.getElementById("runBtnLabel").textContent = "Extract project";
+}
+
+/* =========================================================
+   GALLERY
+========================================================= */
+
+function renderGallery(images){
+  const gallery = document.getElementById("gallery");
+  gallery.innerHTML = "";
+  images.forEach(img=>{
+    const card = document.createElement("div");
+    card.className = "g-card";
+
+    const im = document.createElement("img");
+    im.src = img.previewUrl || URL.createObjectURL(img.blob);
+    im.loading = "lazy";
+    im.alt = img.name;
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "Download";
+    btn.addEventListener("click", ()=> triggerSave(img.blob, img.name));
+
+    card.appendChild(im);
+    card.appendChild(btn);
+    gallery.appendChild(card);
+  });
+}
+
+/* =========================================================
+   ZIP EXPORTS
+========================================================= */
+
+async function buildZip(includeSite, includeImages){
+  if(!lastResult) return null;
+  const zip = new JSZip();
+
+  if(includeSite){
+    zip.file("index.html", lastResult.html);
+    zip.file("README.txt", lastResult.readme);
+    if(lastResult.fontAndCssAssets.length){
+      lastResult.fontAndCssAssets.forEach(a=>{
+        zip.folder("assets/" + a.kind).file(a.name, a.blob);
+      });
+    }
+    if(lastResult.faviconFile){
+      zip.folder("assets").file(lastResult.faviconFile.name, lastResult.faviconFile.blob);
+    }
+  }
+  if(includeImages && lastResult.images.length){
+    const folder = includeSite ? zip.folder("assets/images") : zip.folder("images");
+    lastResult.images.forEach(img=> folder.file(img.name, img.blob));
+  }
+  return await zip.generateAsync({ type:"blob", compression:"DEFLATE" });
+}
+
+document.getElementById("dlSite").addEventListener("click", async ()=>{
+  if(!lastResult) return;
+  const blob = await buildZip(true, false);
+  triggerSave(blob, "siteforge-site.zip");
+});
+
+document.getElementById("dlImages").addEventListener("click", async ()=>{
+  if(!lastResult || !lastResult.images.length){ alert("No images were retrieved for this project."); return; }
+  const blob = await buildZip(false, true);
+  triggerSave(blob, "siteforge-images.zip");
+});
+
+document.getElementById("dlAll").addEventListener("click", async ()=>{
+  if(!lastResult) return;
+  const blob = await buildZip(true, true);
+  triggerSave(blob, "siteforge-project.zip");
+});
+
+document.getElementById("runBtn").addEventListener("click", runPipeline);
+document.getElementById("urlInput").addEventListener("keydown", e=>{ if(e.key === "Enter") runPipeline(); });
+
+</script>
+</body>
+</html>
